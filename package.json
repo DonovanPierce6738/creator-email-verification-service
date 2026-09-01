@@ -1,0 +1,21 @@
+{
+  "name": "creator-email-verification-service",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/creator_signup_service.ts",
+    "start": "tsx src/creator_signup_service.ts",
+    "demo": "tsx scripts/run_signup.ts",
+    "test": "node --import tsx --test test/creator_access.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.4",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3"
+  }
+}
