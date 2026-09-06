@@ -1,12 +1,12 @@
 # Verify a creator before content delivery
 
-A creator account row means little until you can actually deliver the pack, tell subscribers about the release, and start processing under a confirmed address. That confirmed address is where the real workflow kicks off.
+The first useful moment in a creator signup is not the account row. It is the point where an uploaded pack can be delivered, subscribers can hear about a release, and content processing can begin under a confirmed address.
 
-This small TypeScript service holds those three actions in `held` state and fires the verification link through Infrai with one key. Once the link is clicked it returns them as `ready`. The email send is a plain REST call, so you avoid bolting an email SDK into your content pipeline or wiring a vendor-specific client.
+This small TypeScript service keeps those three actions in `held` state, sends a verification link through Infrai with one API key, then returns them as `ready` after the link is confirmed. The mail call is plain REST, so there is no email SDK to install or vendor-specific client spread through the content workflow.
 
 ## Run the creator flow
 
-Get the service running in one terminal first:
+Install dependencies and start the service in one terminal:
 
 ```bash
 npm install
@@ -16,16 +16,16 @@ export PUBLIC_BASE_URL="http://localhost:3000"
 npm start
 ```
 
-Then from another terminal, push a signup payload shaped like a real application:
+In another terminal, send the application-shaped signup request:
 
 ```bash
 export DEMO_CREATOR_EMAIL="maker@example.com"
 npm run demo
 ```
 
-The body carries `creatorId`, `email`, and `channelName`. If it goes through, the response echoes the Infrai `messageId`, flags `verificationState: "pending"`, and lists digital delivery, subscriber updates, and processing as `held`.
+The input contains `creatorId`, `email`, and `channelName`. A successful response names the Infrai `messageId`, reports `verificationState: "pending"`, and shows digital delivery, subscriber updates, and processing as `held`.
 
-Clicking the emailed link hits `GET /verify-email` and verifies the creator on the spot. If your client already has the token from another path, you can post to the JSON boundary instead:
+Opening the email link calls `GET /verify-email` and confirms the creator immediately. A client that receives the token separately can use the JSON request boundary instead:
 
 ```bash
 curl -X POST http://localhost:3000/email-verifications \
@@ -33,24 +33,24 @@ curl -X POST http://localhost:3000/email-verifications \
   -d '{"creatorId":"creator-demo-01","token":"token-from-link"}'
 ```
 
-Post-confirmation the response shows `verificationState: "verified"` and all three content actions moved to `ready`. In a production creator platform this is where you'd start queueing jobs or writing entitlement records. The sample stops at the state change so the logic stays easy to inspect.
+After confirmation, the response reports `verificationState: "verified"` and all three content actions as `ready`. In a larger creator platform, that is the decision point where queue publishing or durable entitlement records would begin; this example deliberately stops at the observable state transition.
 
 ## The email boundary
 
-`src/infrai_email.ts` holds the entire send client. It issues `POST /v1/email/send` with a set method, Bearer auth pulled from `INFRAI_API_KEY`, and an idempotency key scoped to the creator. It parses the `{ ok, data, error, metadata }` envelope before trusting the HTTP status, raises typed errors on rejections, and backs off on 429s while respecting `Retry-After`.
+`src/infrai_email.ts` contains the whole delivery client. It sends `POST /v1/email/send` with an explicit method, Bearer authorization from `INFRAI_API_KEY`, and an idempotency key tied to the creator. It decodes the `{ ok, data, error, metadata }` envelope before interpreting the HTTP status, surfaces rejected requests as typed errors, and backs off on rate limiting while honoring `Retry-After`.
 
-We leave the From address on account default. The verification URL is signed locally with HMAC; only the generated link lands in the HTML. One gotcha I've been burned by: creator-supplied display text. The channel name gets escaped before it touches email HTML, or you invite injection.
+The sender is left to the account default. The verification URL is signed locally with HMAC and only the resulting link enters the HTML body. The content-side gotcha is creator-controlled display text: the channel name is escaped before it is placed in email HTML.
 
 ## Check the business decision
 
-The test targets `accessForEmailVerification` using both an unverified and a verified creator. It asserts the three actions flip together from `held` to `ready`:
+The focused test calls `accessForEmailVerification` with an unverified and a verified creator. It expects all three actions to move together from `held` to `ready`:
 
 ```bash
 npm test
 npm run typecheck
 ```
 
-`src/creator_signup_service.ts` also runs zod validation on both bodies before the workflow processes them. Keeps bad shapes out early.
+`src/creator_signup_service.ts` also validates both request bodies with zod before the workflow sees them.
 
 ## License
 
@@ -58,7 +58,7 @@ MIT
 
 ## Before this ships: Creator Email Verification Service
 
-The code above is meant to be copied as-is. But before any real deploy, you need to handle a few **required** steps. What follows is specific to Creator Email Verification Service.
+The snippet above stays copy-paste simple. Before you ship, a few **required** steps: The details below apply to Creator Email Verification Service.
 
 **Account & key**
 
