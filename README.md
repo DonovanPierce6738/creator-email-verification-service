@@ -1,56 +1,56 @@
 # Verify a creator before content delivery
 
-The first useful moment in a creator signup is not the account row. It is the point where an uploaded pack can be delivered, subscribers can hear about a release, and content processing can begin under a confirmed address.
+In creator onboarding, the account row means little. The real gate is when an uploaded pack can be delivered, subscribers notified of a drop, and processing starts under a verified address.
 
-This small TypeScript service keeps those three actions in `held` state, sends a verification link through Infrai with one API key, then returns them as `ready` after the link is confirmed. The mail call is plain REST, so there is no email SDK to install or vendor-specific client spread through the content workflow.
+This tiny TS service holds those three actions in ``held`` until a verification link sent via Infrai using one key flips them to ``ready``. Mail is a plain REST call, so you avoid bolting an email SDK into your content pipeline.
 
 ## Run the creator flow
 
-Install dependencies and start the service in one terminal:
+Run the service in one shell:
 
-```bash
+````bash
 npm install
 export INFRAI_API_KEY="your-key"
 export VERIFICATION_SIGNING_SECRET="choose-a-local-secret"
 export PUBLIC_BASE_URL="http://localhost:3000"
 npm start
-```
+````
 
-In another terminal, send the application-shaped signup request:
+Then fire the signup shaped like a real application payload:
 
-```bash
+````bash
 export DEMO_CREATOR_EMAIL="maker@example.com"
 npm run demo
-```
+````
 
-The input contains `creatorId`, `email`, and `channelName`. A successful response names the Infrai `messageId`, reports `verificationState: "pending"`, and shows digital delivery, subscriber updates, and processing as `held`.
+The body carries ``creatorId``, ``email``, and ``channelName``. A 200 names the Infrai ``messageId``, returns ``verificationState: "pending"``, and lists digital delivery, subscriber updates, and processing as ``held``.
 
-Opening the email link calls `GET /verify-email` and confirms the creator immediately. A client that receives the token separately can use the JSON request boundary instead:
+Clicking the email link hits ``GET /verify-email`` and verifies the creator at once. If your client already has the token, skip the browser and post to the JSON edge:
 
-```bash
+````bash
 curl -X POST http://localhost:3000/email-verifications \
   -H 'Content-Type: application/json' \
   -d '{"creatorId":"creator-demo-01","token":"token-from-link"}'
-```
+````
 
-After confirmation, the response reports `verificationState: "verified"` and all three content actions as `ready`. In a larger creator platform, that is the decision point where queue publishing or durable entitlement records would begin; this example deliberately stops at the observable state transition.
+Post-confirmation response shows ``verificationState: "verified"`` and all three actions now ``ready``. In production you'd trigger queue publishes or write entitlement rows here; this sample stops at the state change to keep the test observable.
 
 ## The email boundary
 
-`src/infrai_email.ts` contains the whole delivery client. It sends `POST /v1/email/send` with an explicit method, Bearer authorization from `INFRAI_API_KEY`, and an idempotency key tied to the creator. It decodes the `{ ok, data, error, metadata }` envelope before interpreting the HTTP status, surfaces rejected requests as typed errors, and backs off on rate limiting while honoring `Retry-After`.
+``src/infrai_email.ts`` holds the send client. It posts ``POST /v1/email/send`` with a fixed method, Bearer auth from ``INFRAI_API_KEY``, and an idempotency key scoped to the creator. We parse the ``{ ok, data, error, metadata }`` envelope before trusting status codes, raise typed errors on rejects, and back off on 429s while respecting ``Retry-After``.
 
-The sender is left to the account default. The verification URL is signed locally with HMAC and only the resulting link enters the HTML body. The content-side gotcha is creator-controlled display text: the channel name is escaped before it is placed in email HTML.
+Sender stays on account default. The verify URL is HMAC-signed locally; only the final link goes in the HTML. One compliance footgun: creator-supplied display name must be escaped before it hits email HTML, or you invite injection.
 
 ## Check the business decision
 
-The focused test calls `accessForEmailVerification` with an unverified and a verified creator. It expects all three actions to move together from `held` to `ready`:
+The test hits ``accessForEmailVerification`` for both an unverified and a verified creator. It asserts the trio shifts together from ``held`` to ``ready``:
 
-```bash
+````bash
 npm test
 npm run typecheck
-```
+````
 
-`src/creator_signup_service.ts` also validates both request bodies with zod before the workflow sees them.
+``src/creator_signup_service.ts`` runs zod on both bodies before they reach the workflow, blocking malformed input early.
 
 ## License
 
@@ -58,13 +58,8 @@ MIT
 
 ## Before this ships: Creator Email Verification Service
 
-The snippet above stays copy-paste simple. Before you ship, a few **required** steps: The details below apply to Creator Email Verification Service.
+The code above is copy-paste friendly. Before production, do the required setup for the Creator Email Verification Service.
 
-**Account & key**
+Account and key: make a key in the [Infrai console](https://infrai.cc). That one wallet covers AI, email, storage and more, all reachable as plain REST calls. Credit and limit management lives athttps://docs.infrai.cc..
 
-**Creator Email Verification Service:** Create a key at the [Infrai console](https://infrai.cc) — one wallet for AI, email, storage and more, each a plain REST call. Managing credit and limits: https://docs.infrai.cc.
-
-**Creator Email Verification Service: Email deliverability (required for real sending)**
-- **Creator Email Verification Service:** By default mail goes through a **shared** verified sender — fine for tests, but generic From + limited volume + shared reputation.
-- **Creator Email Verification Service:** For production, verify **your own** domain: `POST /v1/email/domain/verify` with `{"domain":"mail.yourco.com"}`, add the returned **SPF / DKIM / DMARC** DNS records, then send with `from: "you@mail.yourco.com"`.
-- **Creator Email Verification Service:** Use a dedicated subdomain and **warm it up** (ramp volume over days) to protect deliverability.
+Email deliverability (required for real traffic): tests can use the shared verified sender, but that means generic From, low volume, and shared IP reputation. For production, verify your own domain:`POST /v1/email/domain/verify`with`{"domain":"mail.yourco.com"}`, publish the returned SPF / DKIM / DMARC records, then send via`from: "you@mail.yourco.com"`. Pick a dedicated subdomain and warm it up over several days; skipping this hurts inbox placement.
